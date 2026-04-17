@@ -42,7 +42,9 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Priorizamos la clave proporcionada por el usuario para evitar conflictos con variables de entorno agotadas
+const API_KEY = "AIzaSyDZJQ2evuAC3ofnUl5g2qT-kmL5NeNQinc";
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 type BotMode = 'normal' | 'programming';
 
@@ -93,6 +95,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isPresenting, setIsPresenting] = useState(false);
+  const [sidebarView, setSidebarView] = useState<'history' | 'settings'>('history');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [isSearchingWiki, setIsSearchingWiki] = useState<number | null>(null);
@@ -249,8 +252,7 @@ export default function App() {
         contents,
         config: {
           systemInstruction,
-          maxOutputTokens: 4096,
-          tools: [{ googleSearch: {} }]
+          maxOutputTokens: 2048,
         }
       });
 
@@ -274,9 +276,19 @@ export default function App() {
         text: botText,
         searchQueries: searchQueries.length > 0 ? Array.from(new Set(searchQueries)) : undefined
       }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating content:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "Hubo un error al procesar tu solicitud. Por favor, inténtalo de nuevo." }]);
+      let errorMessage = "Hubo un error al procesar tu solicitud. Por favor, inténtalo de nuevo.";
+      
+      if (error?.message?.includes("API_KEY_INVALID")) {
+        errorMessage = "La clave API proporcionada no es válida. Por favor, verifica tu configuración.";
+      } else if (error?.message?.includes("quota") || error?.message?.includes("429")) {
+        errorMessage = `Límite de cuota agotado (Google). Error original: ${error.message}`;
+      } else if (error?.message) {
+        errorMessage = `Error técnico: ${error.message}`;
+      }
+
+      setMessages(prev => [...prev, { role: 'model', text: errorMessage }]);
     } finally {
       setIsGenerating(false);
     }
@@ -423,46 +435,126 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar flex flex-col ${isSidebarOpen ? 'left-0' : '-left-[260px]'}`}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-            IrisAI
-          </h2>
+          <div className="flex items-center gap-2">
+            <img 
+              src="/src/icon.png" 
+              alt="IrisAI Logo" 
+              className="w-8 h-8 rounded-lg object-cover border border-white/10"
+              onError={(e) => (e.currentTarget.style.display = 'none')}
+            />
+            <h2 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              IrisAI
+            </h2>
+          </div>
           <button className="navbar__button" onClick={() => setIsSidebarOpen(false)}>
             <X size={20} />
           </button>
         </div>
         
-        <div className="flex flex-col gap-2">
-          <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left" onClick={() => { setShowSearchHistory(true); setIsSidebarOpen(false); }}>
-            <History size={20} />
-            <span>Historial de Búsquedas</span>
-          </button>
-          <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left" onClick={() => { setShowSettings(true); setIsSidebarOpen(false); }}>
-            <Settings size={20} />
-            <span>Preferencias</span>
-          </button>
-          <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left" onClick={() => { setIsPresenting(true); setIsSidebarOpen(false); }}>
-            <Maximize2 size={20} />
-            <span>Modo Presentación</span>
-          </button>
-          <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left" onClick={shareConversation}>
-            <Share size={20} />
-            <span>Compartir Conversación</span>
-          </button>
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {sidebarView === 'history' ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] uppercase font-bold opacity-40 px-2 mb-1">Conversaciones</p>
+              
+              <button 
+                className={`flex items-center gap-3 p-3 rounded-xl transition-all ${botMode === 'normal' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' : 'hover:bg-[var(--secondary-hover-color)]'}`} 
+                onClick={() => { setBotMode('normal'); setIsSidebarOpen(false); }}
+              >
+                <div className={`p-2 rounded-lg ${botMode === 'normal' ? 'bg-blue-500' : 'bg-gray-700'}`}>
+                  <MessageSquare size={16} className="text-white" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className="text-sm font-bold truncate">Chat Normal</p>
+                  <p className="text-[10px] opacity-50 truncate">{normalMessages.length} mensajes</p>
+                </div>
+              </button>
+
+              <button 
+                className={`flex items-center gap-3 p-3 rounded-xl transition-all ${botMode === 'programming' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/20' : 'hover:bg-[var(--secondary-hover-color)]'}`} 
+                onClick={() => { setBotMode('programming'); setIsSidebarOpen(false); }}
+              >
+                <div className={`p-2 rounded-lg ${botMode === 'programming' ? 'bg-purple-500' : 'bg-gray-700'}`}>
+                  <Code size={16} className="text-white" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className="text-sm font-bold truncate">Programación</p>
+                  <p className="text-[10px] opacity-50 truncate">{programmingMessages.length} mensajes</p>
+                </div>
+              </button>
+
+              <div className="mt-4 border-t border-white/5 pt-4">
+                <p className="text-[10px] uppercase font-bold opacity-40 px-2 mb-1">Herramientas</p>
+                <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left w-full" onClick={() => { setShowSearchHistory(true); setIsSidebarOpen(false); }}>
+                  <History size={18} className="opacity-70" />
+                  <span className="text-sm">Historial de Búsquedas</span>
+                </button>
+                <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left w-full" onClick={() => { setIsPresenting(true); setIsSidebarOpen(false); }}>
+                  <Maximize2 size={18} className="opacity-70" />
+                  <span className="text-sm">Modo Presentación</span>
+                </button>
+                <button className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left w-full" onClick={shareConversation}>
+                  <Share size={18} className="opacity-70" />
+                  <span className="text-sm">Compartir</span>
+                </button>
+                <button 
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left text-red-400 w-full"
+                  onClick={() => { setShowClearConfirm(true); setIsSidebarOpen(false); }}
+                >
+                  <Trash2 size={18} />
+                  <span className="text-sm">Vaciar Chat</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <p className="text-[10px] uppercase font-bold opacity-40 px-2">Funciones de IrisAI</p>
+              <div className="space-y-3 px-2">
+                {[
+                  { icon: <MessageSquare className="text-blue-400" />, title: "Chat Inteligente", desc: "Motor Gemini de última generación para respuestas detalladas." },
+                  { icon: <Code className="text-purple-400" />, title: "Modo Programación", desc: "Analista de código experto con soporte para múltiples lenguajes." },
+                  { icon: <Camera className="text-green-400" />, title: "Análisis de Imágenes", desc: "Sube fotos para que Iris las reconozca y analice." },
+                  { icon: <Paperclip className="text-orange-400" />, title: "Soporte de Documentos", desc: "Análisis profundo de archivos de texto y código." },
+                  { icon: <Mic className="text-red-400" />, title: "Comandos de Voz", desc: "Háblale a Iris y ella transcribirá tus palabras." },
+                  { icon: <Globe className="text-cyan-400" />, title: "Búsqueda Wikipedia", desc: "Verificación de datos en tiempo real con Wikipedia." },
+                  { icon: <Maximize2 className="text-yellow-400" />, title: "Modo Presentación", desc: "Interfaz limpia y gigante para presentaciones." },
+                  { icon: <Settings className="text-gray-400" />, title: "Multidioma", desc: "Configura el idioma de voz preferido." },
+                ].map((f, i) => (
+                  <div key={i} className="flex gap-3 p-2 rounded-xl bg-white/5 border border-white/5">
+                    <div className="mt-1">{f.icon}</div>
+                    <div>
+                      <p className="text-xs font-bold">{f.title}</p>
+                      <p className="text-[10px] opacity-50 leading-tight">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-auto border-t border-white/5 pt-4 flex gap-2">
           <button 
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left text-red-400"
-            onClick={() => { setShowClearConfirm(true); setIsSidebarOpen(false); }}
+            className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${sidebarView === 'history' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}
+            onClick={() => setSidebarView('history')}
           >
-            <Trash2 size={20} />
-            <span>Vaciar Historial</span>
+            <History size={20} />
+            <span className="text-[9px] font-bold uppercase">Chats</span>
           </button>
           <button 
-            className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--secondary-hover-color)] transition-colors text-left"
-            onClick={() => { setShowHelp(true); setIsSidebarOpen(false); }}
+            className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${sidebarView === 'settings' ? 'bg-blue-500/20 text-blue-400' : 'opacity-40 hover:opacity-100'}`}
+            onClick={() => setSidebarView('settings')}
+          >
+            <Settings size={20} />
+            <span className="text-[9px] font-bold uppercase">Funciones</span>
+          </button>
+          <button 
+            className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl opacity-40 hover:opacity-100 transition-all"
+            onClick={() => { setShowSettings(true); setIsSidebarOpen(false); }}
           >
             <HelpCircle size={20} />
-            <span>Ayuda</span>
+            <span className="text-[9px] font-bold uppercase">Ajustes</span>
           </button>
         </div>
       </aside>
@@ -472,11 +564,17 @@ export default function App() {
         {messages.length === 0 ? (
           <div className="header">
             <motion.div 
-              className="header__title"
+              className="header__title flex flex-col items-center"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
+              <img 
+                src="/src/icon.png" 
+                alt="IrisAI Logo" 
+                className="w-24 h-24 rounded-3xl mb-6 shadow-2xl border border-white/10 object-cover"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
               <h1>{botMode === 'normal' ? 'IrisAI' : 'IrisAI Programación'}</h1>
               <h2>{botMode === 'normal' ? '¿En qué puedo ayudarte hoy?' : '¿Qué vamos a programar hoy?'}</h2>
             </motion.div>
