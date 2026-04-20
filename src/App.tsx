@@ -42,10 +42,6 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-// Priorizamos la clave proporcionada por el usuario para evitar conflictos con variables de entorno agotadas
-const API_KEY = "AIzaSyDZJQ2evuAC3ofnUl5g2qT-kmL5NeNQinc";
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
 type BotMode = 'normal' | 'programming';
 
 interface Message {
@@ -247,34 +243,23 @@ export default function App() {
         };
       });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents,
-        config: {
-          systemInstruction,
-          maxOutputTokens: 2048,
-        }
+      const proxyResponse = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents, systemInstruction })
       });
 
-      const botText = response.text || "Lo siento, no pude generar una respuesta.";
-      
-      // Extract search queries if available
-      const searchQueries: string[] = [];
-      if (response.candidates?.[0]?.groundingMetadata?.searchEntryPoint?.renderedContent) {
-        // This is a heuristic, the actual queries might be in groundingChunks or similar
-        // For simplicity, we'll look for grounding metadata
-        const metadata = response.candidates[0].groundingMetadata;
-        if (metadata.groundingChunks) {
-          metadata.groundingChunks.forEach((chunk: any) => {
-            if (chunk.web?.title) searchQueries.push(chunk.web.title);
-          });
-        }
+      if (!proxyResponse.ok) {
+        const errorData = await proxyResponse.json();
+        throw new Error(errorData.error || "Error en el servidor");
       }
 
+      const data = await proxyResponse.json();
+      const botText = data.text || "Lo siento, no pude generar una respuesta.";
+      
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: botText,
-        searchQueries: searchQueries.length > 0 ? Array.from(new Set(searchQueries)) : undefined
+        text: botText
       }]);
     } catch (error: any) {
       console.error("Error generating content:", error);
