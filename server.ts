@@ -10,58 +10,53 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-  app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 
-  // Configuración de Gemini en el SERVIDOR (Seguro)
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  
-  app.post("/api/chat", async (req, res) => {
-    try {
-      if (!GEMINI_API_KEY) {
-        return res.status(500).json({ error: "GEMINI_API_KEY no configurado en el servidor" });
-      }
-
-      const { contents, systemInstruction } = req.body;
-      const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-      const response = await genAI.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents,
-        config: {
-          systemInstruction,
-          maxOutputTokens: 2048,
-        }
-      });
-      
-      res.json({ text: response.text });
-    } catch (error: any) {
-      console.error("Error en backend:", error);
-      res.status(500).json({ error: error.message || "Error interno del servidor" });
+// API segura para Gemini
+app.post("/api/chat", async (req, res) => {
+  try {
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: "GEMINI_API_KEY no configurado en el servidor" });
     }
-  });
 
-  // Vite middleware para desarrollo o archivos estáticos para producción
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    const { contents, systemInstruction } = req.body;
+    const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const response = await genAI.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents,
+      config: {
+        systemInstruction,
+        maxOutputTokens: 2048,
+      }
     });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Error en backend:", error);
+    res.status(500).json({ error: error.message || "Error interno del servidor" });
   }
+});
 
+// Manejo de archivos estáticos y rutas SPA
+const distPath = path.join(process.cwd(), 'dist');
+app.use(express.static(distPath));
+
+app.get('*', (req, res) => {
+  // Si la ruta no es /api, servimos el index.html para que React maneje el resto
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(distPath, 'index.html'));
+  }
+});
+
+// Esto permite que funcione localmente con 'npm run dev'
+if (process.env.NODE_ENV !== "production") {
+  const PORT = 3000;
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`IrisAI Server running on http://localhost:${PORT}`);
   });
-  return app;
 }
 
-export const server = startServer();
+export default app;
