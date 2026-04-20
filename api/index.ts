@@ -1,14 +1,9 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import path from "path";
-import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -40,12 +35,11 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// Manejo de archivos estáticos y rutas SPA
+// Manejo de archivos estáticos y rutas SPA (Solo para local dev o si Vercel no maneja el ruteo)
 const distPath = path.join(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
-  // Si la ruta no es /api, servimos el index.html para que React maneje el resto
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(distPath, 'index.html'));
   }
