@@ -265,10 +265,8 @@ export default function App() {
       console.error("Error generating content:", error);
       let errorMessage = "Hubo un error al procesar tu solicitud. Por favor, inténtalo de nuevo.";
       
-      if (error?.message?.includes("API_KEY_INVALID")) {
-        errorMessage = "La clave API proporcionada no es válida. Por favor, verifica tu configuración.";
-      } else if (error?.message?.includes("quota") || error?.message?.includes("429")) {
-        errorMessage = `Límite de cuota agotado (Google). Error original: ${error.message}`;
+      if (error?.message?.includes("Unexpected token") || error?.message?.includes("JSON")) {
+        errorMessage = "Error de conexión: El servidor no respondió correctamente (posible error 404 en Vercel). Asegúrate de haber subido el archivo vercel.json.";
       } else if (error?.message) {
         errorMessage = `Error técnico: ${error.message}`;
       }

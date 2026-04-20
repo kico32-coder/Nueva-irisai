@@ -61,6 +61,7 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`IrisAI Server running on http://localhost:${PORT}`);
   });
+  return app;
 }
 
-startServer();
+export const server = startServer();
